@@ -1,0 +1,1301 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Prelode - リアルタイム日記プレビュー</title>
+<style>
+  /* ===========================
+     Design tokens
+     =========================== */
+  :root {
+    --bg-base: #1a1817;
+    --bg-elev: #232020;
+    --bg-panel: #2a2625;
+    --bg-input: #f4f1ec;
+    --bg-preview: #ffffff;
+    --ink: #e8e3da;
+    --ink-soft: #a39c92;
+    --ink-mute: #6b645c;
+    --accent: #c9a85c;
+    --accent-soft: #8a7644;
+    --accent-glow: rgba(201, 168, 92, 0.15);
+    --border: #3a3432;
+    --border-soft: #2f2a28;
+    --danger: #c1554a;
+    --success: #6b8e5a;
+
+    /* Lodestone preview colors (white theme) */
+    --lds-bg: #ffffff;
+    --lds-text: #333333;
+    --lds-link: #1c5d99;
+    --lds-hb-bg: #f0ede6;
+    --lds-hb-border: #d4cfc3;
+
+    /* Lodestone preview colors (dark theme) */
+    --lds-bg-dark: #1c1916;
+    --lds-text-dark: #d8d3c8;
+    --lds-link-dark: #c9a85c;
+    --lds-hb-bg-dark: #2a2724;
+    --lds-hb-border-dark: #3d3833;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    background: var(--bg-base);
+    color: var(--ink);
+    font-family: "Hiragino Mincho ProN", "Yu Mincho", "YuMincho", serif;
+    font-feature-settings: "palt";
+  }
+
+  body {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* ===========================
+     Header
+     =========================== */
+  header {
+    flex-shrink: 0;
+    padding: 14px 28px;
+    background: linear-gradient(180deg, #2c2724 0%, #211d1b 100%);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 24px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.3);
+  }
+
+  .brand {
+    display: flex;
+    align-items: baseline;
+    gap: 14px;
+  }
+
+  .brand-mark {
+    font-family: "Cinzel", "Trajan Pro", serif;
+    font-size: 20px;
+    letter-spacing: 0.18em;
+    color: var(--accent);
+    font-weight: 600;
+    text-transform: uppercase;
+  }
+
+  .brand-sub {
+    font-size: 11px;
+    letter-spacing: 0.25em;
+    color: var(--ink-mute);
+    text-transform: uppercase;
+  }
+
+  .header-meta {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    font-size: 12px;
+    color: var(--ink-soft);
+  }
+
+  .char-count {
+    font-variant-numeric: tabular-nums;
+    padding: 5px 10px;
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    border-radius: 2px;
+    letter-spacing: 0.05em;
+    font-size: 11px;
+    color: var(--ink-soft);
+    font-family: "SF Mono", "Menlo", "Consolas", monospace;
+  }
+
+  .char-count.warn { color: #d4a25c; border-color: #5c4a2a; }
+  .char-count.danger { color: var(--danger); border-color: #5c2f2a; }
+
+  .theme-toggle {
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    color: var(--ink-soft);
+    padding: 5px 12px;
+    border-radius: 2px;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    transition: all 0.2s;
+    height: 28px;
+  }
+  .theme-toggle:hover {
+    border-color: var(--accent-soft);
+    color: var(--accent);
+  }
+
+  /* ===========================
+     Toolbar
+     =========================== */
+  .toolbar {
+    flex-shrink: 0;
+    background: var(--bg-elev);
+    border-bottom: 1px solid var(--border);
+    padding: 8px 20px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    align-items: center;
+  }
+
+  .toolbar-meta {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding-left: 12px;
+  }
+
+  .tool-group {
+    display: flex;
+    gap: 2px;
+    padding: 0 8px;
+    border-right: 1px solid var(--border-soft);
+    align-items: center;
+  }
+  .tool-group:last-of-type { border-right: none; }
+
+  .tool-btn {
+    background: transparent;
+    border: 1px solid transparent;
+    color: var(--ink-soft);
+    width: 34px;
+    height: 32px;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 14px;
+    border-radius: 2px;
+    transition: all 0.15s;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .tool-btn:hover {
+    background: var(--bg-panel);
+    color: var(--accent);
+    border-color: var(--border);
+  }
+  .tool-btn:active { transform: translateY(1px); }
+
+  .tool-btn.b { font-weight: 700; }
+  .tool-btn.i { font-style: italic; }
+  .tool-btn.u { text-decoration: underline; }
+  .tool-btn.s { text-decoration: line-through; }
+
+  .tool-btn.size-s { font-size: 10px; font-weight: 600; }
+  .tool-btn.size-m { font-size: 13px; font-weight: 600; }
+  .tool-btn.size-l { font-size: 17px; font-weight: 600; }
+
+  .color-swatch {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    border: 1px solid rgba(255,255,255,0.2);
+  }
+
+  .tool-select {
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    color: var(--ink-soft);
+    padding: 6px 10px;
+    border-radius: 2px;
+    font-family: inherit;
+    font-size: 12px;
+    cursor: pointer;
+    outline: none;
+  }
+  .tool-select:focus { border-color: var(--accent-soft); }
+
+  /* ===========================
+     Main split panes
+     =========================== */
+  main {
+    flex: 1;
+    display: grid;
+    grid-template-columns: 1fr 6px 1fr;
+    overflow: hidden;
+    min-height: 0;
+  }
+
+  .pane {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    min-width: 0;
+  }
+
+  .pane-header {
+    padding: 10px 20px;
+    background: var(--bg-elev);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-shrink: 0;
+  }
+
+  .pane-title {
+    font-family: "Cinzel", serif;
+    font-size: 11px;
+    letter-spacing: 0.3em;
+    color: var(--accent);
+    text-transform: uppercase;
+  }
+
+  .pane-title::before {
+    content: "✦";
+    margin-right: 8px;
+    color: var(--accent-soft);
+    font-size: 10px;
+  }
+
+  .pane-hint {
+    font-size: 11px;
+    color: var(--ink-mute);
+    letter-spacing: 0.05em;
+  }
+
+  /* Editor */
+  #editor {
+    flex: 1;
+    background: var(--bg-input);
+    color: #2a2520;
+    border: none;
+    padding: 24px 28px;
+    font-family: "SF Mono", "Menlo", "Consolas", "Yu Gothic", monospace;
+    font-size: 14px;
+    line-height: 1.85;
+    resize: none;
+    outline: none;
+    width: 100%;
+  }
+
+  /* Resizer */
+  .resizer {
+    background: var(--bg-elev);
+    cursor: col-resize;
+    position: relative;
+    transition: background 0.15s;
+  }
+  .resizer:hover { background: var(--accent-soft); }
+  .resizer::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    left: 50%;
+    width: 1px;
+    background: var(--border);
+  }
+
+  /* Preview */
+  #preview-wrap {
+    flex: 1;
+    overflow: auto;
+    background: var(--bg-preview);
+    transition: background 0.3s;
+  }
+  #preview-wrap.dark { background: var(--lds-bg-dark); }
+
+  #preview {
+    padding: 32px 36px;
+    font-family: "Hiragino Sans", "Yu Gothic", "Meiryo", sans-serif;
+    font-size: 14px;
+    line-height: 1.85;
+    color: var(--lds-text);
+    word-wrap: break-word;
+    max-width: 720px;
+    margin: 0 auto;
+  }
+  #preview-wrap.dark #preview { color: var(--lds-text-dark); }
+
+  /* ===========================
+     Lodestone preview rendering
+     =========================== */
+  #preview a {
+    color: var(--lds-link);
+    text-decoration: underline;
+  }
+  #preview-wrap.dark #preview a { color: var(--lds-link-dark); }
+
+  #preview .lds-hb {
+    display: block;
+    margin: 12px 0;
+    border: 1px solid var(--lds-hb-border);
+    border-radius: 3px;
+    background: var(--lds-hb-bg);
+  }
+  #preview-wrap.dark #preview .lds-hb {
+    border-color: var(--lds-hb-border-dark);
+    background: var(--lds-hb-bg-dark);
+  }
+  #preview .lds-hb-label {
+    padding: 8px 14px;
+    cursor: pointer;
+    user-select: none;
+    color: var(--lds-link);
+    font-size: 13px;
+  }
+  #preview-wrap.dark #preview .lds-hb-label { color: var(--lds-link-dark); }
+  #preview .lds-hb-label::before {
+    content: "▶ ";
+    font-size: 10px;
+  }
+  #preview .lds-hb.open .lds-hb-label::before { content: "▼ "; }
+  #preview .lds-hb-content {
+    display: none;
+    padding: 4px 14px 14px;
+    border-top: 1px solid var(--lds-hb-border);
+  }
+  #preview-wrap.dark #preview .lds-hb-content {
+    border-top-color: var(--lds-hb-border-dark);
+  }
+  #preview .lds-hb.open .lds-hb-content { display: block; }
+
+  #preview .lds-img-placeholder {
+    display: inline-block;
+    padding: 28px 36px;
+    background: #ebe5d7;
+    border: 1px dashed #b8af9a;
+    color: #8a8270;
+    font-size: 12px;
+    margin: 6px 0;
+    border-radius: 2px;
+    font-family: inherit;
+    text-align: center;
+  }
+  #preview-wrap.dark #preview .lds-img-placeholder {
+    background: #2a2620;
+    border-color: #4a443a;
+    color: #6b6557;
+  }
+
+  #preview .lds-video-placeholder {
+    display: inline-block;
+    padding: 32px 48px;
+    background: #2a2520;
+    border: 1px solid #3a3530;
+    color: #a39c92;
+    font-size: 12px;
+    margin: 6px 0;
+    border-radius: 2px;
+    font-family: inherit;
+    text-align: center;
+    line-height: 1.6;
+  }
+  #preview .lds-video-url {
+    display: block;
+    margin-top: 6px;
+    font-size: 10px;
+    color: #6b645c;
+    font-family: "SF Mono", "Menlo", monospace;
+    word-break: break-all;
+  }
+
+  #preview .lds-video-embed {
+    display: block;
+    position: relative;
+    width: 100%;
+    max-width: 560px;
+    aspect-ratio: 16 / 9;
+    margin: 12px auto;
+    background: #000;
+    border-radius: 2px;
+    overflow: hidden;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.2);
+  }
+  #preview .lds-video-embed iframe {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    border: 0;
+  }
+
+  /* Validation panel */
+  .validation {
+    flex-shrink: 0;
+    background: var(--bg-elev);
+    border-top: 1px solid var(--border);
+    padding: 8px 20px;
+    font-size: 11px;
+    color: var(--ink-mute);
+    min-height: 32px;
+    max-height: 120px;
+    overflow-y: auto;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    align-items: flex-start;
+  }
+  .validation-item {
+    padding: 3px 9px;
+    border-radius: 2px;
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    letter-spacing: 0.04em;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    transition: all 0.15s;
+  }
+  .validation-item[data-line] {
+    cursor: pointer;
+  }
+  .validation-item[data-line]:hover {
+    background: var(--bg-base);
+    border-color: var(--accent-soft);
+  }
+  .validation-item.ok { color: var(--success); border-color: #2f4530; }
+  .validation-item.warn { color: #d4a25c; border-color: #5c4a2a; }
+  .validation-item.error { color: var(--danger); border-color: #5c2f2a; }
+
+  .validation-line {
+    display: inline-block;
+    padding: 1px 6px;
+    background: rgba(0,0,0,0.25);
+    border-radius: 2px;
+    font-family: "SF Mono", "Menlo", "Consolas", monospace;
+    font-size: 10px;
+    color: var(--ink-soft);
+    letter-spacing: 0;
+  }
+
+  /* ===========================
+     Modal
+     =========================== */
+  .modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.7);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+  }
+  .modal-backdrop.show { display: flex; }
+  .modal {
+    background: var(--bg-elev);
+    border: 1px solid var(--border);
+    padding: 28px;
+    border-radius: 4px;
+    min-width: 360px;
+    box-shadow: 0 12px 48px rgba(0,0,0,0.5);
+  }
+  .modal h3 {
+    margin: 0 0 18px;
+    font-family: "Cinzel", serif;
+    font-size: 13px;
+    letter-spacing: 0.25em;
+    color: var(--accent);
+    text-transform: uppercase;
+    font-weight: 500;
+  }
+  .modal label {
+    display: block;
+    font-size: 11px;
+    color: var(--ink-soft);
+    margin-bottom: 6px;
+    letter-spacing: 0.08em;
+  }
+  .modal input {
+    width: 100%;
+    padding: 9px 12px;
+    background: var(--bg-base);
+    border: 1px solid var(--border);
+    color: var(--ink);
+    font-family: inherit;
+    font-size: 13px;
+    border-radius: 2px;
+    outline: none;
+    margin-bottom: 14px;
+  }
+  .modal input:focus { border-color: var(--accent-soft); }
+  .modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 8px;
+  }
+  .btn {
+    padding: 8px 18px;
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--ink-soft);
+    font-family: inherit;
+    font-size: 12px;
+    letter-spacing: 0.1em;
+    border-radius: 2px;
+    cursor: pointer;
+    transition: all 0.15s;
+    text-transform: uppercase;
+  }
+  .btn:hover { border-color: var(--accent-soft); color: var(--accent); }
+  .btn.primary { background: var(--accent-soft); color: #1a1817; border-color: var(--accent-soft); }
+  .btn.primary:hover { background: var(--accent); color: #1a1817; }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: var(--bg-elev); }
+  ::-webkit-scrollbar-thumb {
+    background: var(--border);
+    border-radius: 0;
+    border: 2px solid var(--bg-elev);
+  }
+  ::-webkit-scrollbar-thumb:hover { background: var(--accent-soft); }
+
+  /* Responsive */
+  @media (max-width: 900px) {
+    main { grid-template-columns: 1fr; grid-template-rows: 1fr 6px 1fr; }
+    .resizer { cursor: row-resize; }
+    .resizer::before { width: auto; height: 1px; left: 0; right: 0; top: 50%; }
+    header { padding: 12px 16px; }
+    .brand-sub { display: none; }
+    .toolbar-meta { margin-left: 0; width: 100%; justify-content: flex-end; padding-top: 4px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <div class="brand-mark">Prelode</div>
+    <div class="brand-sub">リアルタイム日記プレビュー</div>
+  </div>
+</header>
+
+<div class="toolbar">
+  <div class="tool-group">
+    <button class="tool-btn size-s" data-action="size" data-size="10" title="文字サイズ小">A</button>
+    <button class="tool-btn size-m" data-action="size" data-size="12" title="文字サイズ中">A</button>
+    <button class="tool-btn size-l" data-action="size" data-size="18" title="文字サイズ大">A</button>
+    <select class="tool-select" id="sizeSelect" title="文字サイズ（任意指定）">
+      <option value="">…</option>
+      <option value="8">8</option>
+      <option value="10">10</option>
+      <option value="12">12</option>
+      <option value="14">14</option>
+      <option value="16">16</option>
+      <option value="18">18</option>
+      <option value="20">20</option>
+      <option value="24">24</option>
+      <option value="28">28</option>
+      <option value="32">32</option>
+    </select>
+  </div>
+
+  <div class="tool-group">
+    <button class="tool-btn" data-action="color" title="文字色">
+      <span class="color-swatch" style="background: linear-gradient(135deg,#e74c3c,#3498db,#2ecc71);"></span>
+    </button>
+  </div>
+
+  <div class="tool-group">
+    <button class="tool-btn b" data-action="wrap" data-tag="b" title="太字">B</button>
+    <button class="tool-btn i" data-action="wrap" data-tag="i" title="斜体">I</button>
+    <button class="tool-btn u" data-action="wrap" data-tag="u" title="下線">U</button>
+    <button class="tool-btn s" data-action="wrap" data-tag="s" title="取り消し線">S</button>
+  </div>
+
+  <div class="tool-group">
+    <button class="tool-btn" data-action="wrap" data-tag="left" title="左に配置">⇤</button>
+    <button class="tool-btn" data-action="wrap" data-tag="center" title="中央に配置">≡</button>
+    <button class="tool-btn" data-action="wrap" data-tag="right" title="右に配置">⇥</button>
+  </div>
+
+  <div class="tool-group">
+    <button class="tool-btn" data-action="link" title="リンク">🔗</button>
+    <button class="tool-btn" data-action="wrap" data-tag="hb" title="隠す">▣</button>
+    <button class="tool-btn" data-action="image" title="画像挿入">🖼</button>
+    <button class="tool-btn" data-action="video" title="動画挿入">▶</button>
+  </div>
+
+  <div class="toolbar-meta">
+    <span class="char-count" id="charCount">0 / 10,000</span>
+    <button class="theme-toggle" id="themeToggle">▣ 黒背景</button>
+  </div>
+</div>
+
+<main>
+  <section class="pane">
+    <div class="pane-header">
+      <span class="pane-title">Editor</span>
+      <span class="pane-hint">自動保存 · ローカル</span>
+    </div>
+    <textarea id="editor" placeholder="ここに日記を書きましょう。
+
+[b]太字[/b] [i]斜体[/i] [u]下線[/u] [s]取消線[/s]
+[color=#c9a85c]金色の文字[/color]
+[size=18]大きい文字[/size]
+[center]中央寄せ[/center]
+[url=https://example.com]リンク[/url]
+[hb]クリックで開く隠し要素[/hb]
+[img=12345]"></textarea>
+    <div class="validation" id="validation"></div>
+  </section>
+
+  <div class="resizer" id="resizer"></div>
+
+  <section class="pane">
+    <div class="pane-header">
+      <span class="pane-title">Preview</span>
+      <span class="pane-hint">リアルタイム反映</span>
+    </div>
+    <div id="preview-wrap">
+      <div id="preview"></div>
+    </div>
+  </section>
+</main>
+
+<!-- Link modal -->
+<div class="modal-backdrop" id="linkModal">
+  <div class="modal">
+    <h3>Insert Link</h3>
+    <label>URL</label>
+    <input type="text" id="linkUrl" placeholder="https://example.com">
+    <p style="font-size:11px;color:var(--ink-mute);margin:0 0 14px;line-height:1.6;">
+      ※ エディター内で文字を選択した状態で挿入すると、選択した文字がリンクテキストになります。
+    </p>
+    <div class="modal-actions">
+      <button class="btn" data-close>キャンセル</button>
+      <button class="btn primary" id="linkOk">挿入</button>
+    </div>
+  </div>
+</div>
+
+<!-- Color modal -->
+<div class="modal-backdrop" id="colorModal">
+  <div class="modal">
+    <h3>Choose Color</h3>
+    <label>カラーコード（例: #c9a85c）</label>
+    <input type="text" id="colorCode" placeholder="#c9a85c" value="#c9a85c">
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px;">
+      <button class="color-preset" data-color="#c9a85c" style="width:28px;height:28px;border:1px solid #444;background:#c9a85c;cursor:pointer;border-radius:2px;"></button>
+      <button class="color-preset" data-color="#e74c3c" style="width:28px;height:28px;border:1px solid #444;background:#e74c3c;cursor:pointer;border-radius:2px;"></button>
+      <button class="color-preset" data-color="#3498db" style="width:28px;height:28px;border:1px solid #444;background:#3498db;cursor:pointer;border-radius:2px;"></button>
+      <button class="color-preset" data-color="#2ecc71" style="width:28px;height:28px;border:1px solid #444;background:#2ecc71;cursor:pointer;border-radius:2px;"></button>
+      <button class="color-preset" data-color="#9b59b6" style="width:28px;height:28px;border:1px solid #444;background:#9b59b6;cursor:pointer;border-radius:2px;"></button>
+      <button class="color-preset" data-color="#f39c12" style="width:28px;height:28px;border:1px solid #444;background:#f39c12;cursor:pointer;border-radius:2px;"></button>
+      <button class="color-preset" data-color="#ffffff" style="width:28px;height:28px;border:1px solid #444;background:#ffffff;cursor:pointer;border-radius:2px;"></button>
+      <button class="color-preset" data-color="#000000" style="width:28px;height:28px;border:1px solid #444;background:#000000;cursor:pointer;border-radius:2px;"></button>
+    </div>
+    <div class="modal-actions">
+      <button class="btn" data-close>キャンセル</button>
+      <button class="btn primary" id="colorOk">挿入</button>
+    </div>
+  </div>
+</div>
+
+<!-- Image modal -->
+<div class="modal-backdrop" id="imageModal">
+  <div class="modal">
+    <h3>Insert Image</h3>
+    <label>画像ID（Lodestoneにアップロード済みの画像ID、またはテストID）</label>
+    <input type="text" id="imageId" placeholder="12345">
+    <p style="font-size:11px;color:var(--ink-mute);margin:0 0 14px;line-height:1.6;">
+      ※ プレビューでは実際の画像は表示されず、プレースホルダーが表示されます。<br>
+      実際の画像はLodestone上で表示されます。
+    </p>
+    <div class="modal-actions">
+      <button class="btn" data-close>キャンセル</button>
+      <button class="btn primary" id="imageOk">挿入</button>
+    </div>
+  </div>
+</div>
+
+<!-- Video modal -->
+<div class="modal-backdrop" id="videoModal">
+  <div class="modal">
+    <h3>Insert Video</h3>
+    <label>動画URL（YouTube / Twitch）</label>
+    <input type="text" id="videoUrl" placeholder="https://www.youtube.com/watch?v=...">
+    <p style="font-size:11px;color:var(--ink-mute);margin:0 0 14px;line-height:1.7;">
+      ※対応動画サイトは「YouTube」または「Twitch」です。Twitchはビデオやダイジェスト、クリップに対応しています。<br>
+      ※YouTubeまたはTwitch上で非公開の動画の埋め込みはできません。また、FFXIVと関係のない動画の埋め込みも極力お控えください。
+    </p>
+    <div class="modal-actions">
+      <button class="btn" data-close>キャンセル</button>
+      <button class="btn primary" id="videoOk">挿入</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ===========================
+   State
+   =========================== */
+const editor = document.getElementById('editor');
+const preview = document.getElementById('preview');
+const previewWrap = document.getElementById('preview-wrap');
+const charCountEl = document.getElementById('charCount');
+const validationEl = document.getElementById('validation');
+const STORAGE_KEY = 'prelode-draft';
+const MAX_CHARS = 10000;
+const MAX_HB = 5;
+
+/* ===========================
+   BBCode parser → HTML
+   =========================== */
+function escapeHtml(s) {
+  return s.replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#39;');
+}
+
+/**
+ * 動画URL（YouTube / Twitch）を埋め込み用iframe URLに変換する。
+ * Twitchはビデオ(VOD)、クリップ、ダイジェスト(コレクション)に対応。
+ * 対応していないURLの場合は null を返す。
+ */
+function toEmbedUrl(url) {
+  // YouTube: watch / youtu.be / shorts / embed
+  let m = url.match(/(?:youtube\.com\/(?:watch\?v=|embed\/|shorts\/)|youtu\.be\/)([\w-]{6,})/i);
+  if (m) {
+    const id = encodeURIComponent(m[1]);
+    return `https://www.youtube.com/embed/${id}`;
+  }
+
+  // Twitch埋め込みは parent パラメータ必須(現在のホスト名を使用)
+  // file://やローカルプレビューでは動作しない場合あり
+  const parent = (typeof location !== 'undefined' && location.hostname)
+    ? location.hostname
+    : 'localhost';
+
+  // Twitch クリップ: https://clips.twitch.tv/SlugName  または  https://www.twitch.tv/{channel}/clip/SlugName
+  m = url.match(/clips\.twitch\.tv\/(?:embed\?clip=)?([\w-]+)/i)
+      || url.match(/twitch\.tv\/\w+\/clip\/([\w-]+)/i);
+  if (m) {
+    const slug = encodeURIComponent(m[1]);
+    return `https://clips.twitch.tv/embed?clip=${slug}&parent=${parent}`;
+  }
+
+  // Twitch ビデオ(VOD): https://www.twitch.tv/videos/123456789
+  m = url.match(/twitch\.tv\/videos\/(\d+)/i);
+  if (m) {
+    const vid = encodeURIComponent(m[1]);
+    return `https://player.twitch.tv/?video=v${vid}&parent=${parent}`;
+  }
+
+  // Twitch ダイジェスト(コレクション): https://www.twitch.tv/collections/abcDeF1ghIJ2kL
+  m = url.match(/twitch\.tv\/collections\/([\w-]+)/i);
+  if (m) {
+    const cid = encodeURIComponent(m[1]);
+    return `https://player.twitch.tv/?collection=${cid}&parent=${parent}`;
+  }
+
+  return null;
+}
+
+function parseBBCode(src) {
+  return parseToHtml(src).html;
+}
+
+/**
+ * Lodestoneと同じく、未クローズタグは自動で文末まで延長され、
+ * 対応する開きタグがない閉じタグはテキストとして表示される。
+ *
+ * 戻り値: { html: string, issues: Array<{level, text, line}> }
+ */
+function parseToHtml(src) {
+  const issues = [];
+
+  // タグ定義 - voidは単独タグ(閉じタグ不要)
+  const TAG_DEFS = {
+    b:      { kind: 'pair', open: () => '<strong>', close: () => '</strong>' },
+    i:      { kind: 'pair', open: () => '<em>', close: () => '</em>' },
+    u:      { kind: 'pair', open: () => '<u>', close: () => '</u>' },
+    s:      { kind: 'pair', open: () => '<s>', close: () => '</s>' },
+    size:   { kind: 'pair', open: (val) => {
+              const n = Math.max(8, Math.min(48, parseInt(val) || 14));
+              return `<span style="font-size:${n}px;line-height:1.5;">`;
+            }, close: () => '</span>' },
+    color:  { kind: 'pair', open: (val) => {
+              const safe = /^#[0-9a-fA-F]{3,8}$|^[a-zA-Z]+$/.test(val) ? val : 'inherit';
+              return `<span style="color:${safe};">`;
+            }, close: () => '</span>' },
+    left:   { kind: 'pair', open: () => '<div style="text-align:left;">', close: () => '</div>' },
+    center: { kind: 'pair', open: () => '<div style="text-align:center;">', close: () => '</div>' },
+    right:  { kind: 'pair', open: () => '<div style="text-align:right;">', close: () => '</div>' },
+    url:    { kind: 'pair', open: (val) => {
+              const safe = (val || '').replace(/"/g, '&quot;');
+              return `<a href="${safe}" target="_blank" rel="noopener">`;
+            }, close: () => '</a>' },
+    hb:     { kind: 'pair', open: () =>
+                `<span class="lds-hb"><span class="lds-hb-label" onclick="this.parentElement.classList.toggle('open')">クリックして表示</span><span class="lds-hb-content">`,
+              close: () => '</span></span>' },
+    img:    { kind: 'void', render: (val) =>
+                `<span class="lds-img-placeholder">🖼 image #${escapeHtml(val)}</span>` },
+    video:  { kind: 'void', render: (val) => {
+              const url = (val || '').trim();
+              const embed = toEmbedUrl(url);
+              if (embed) {
+                return `<span class="lds-video-embed"><iframe src="${embed}" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe></span>`;
+              }
+              return `<span class="lds-video-placeholder">▶ video<br><span class="lds-video-url">${escapeHtml(url)}</span></span>`;
+            } },
+  };
+
+  // ===== トークナイザー =====
+  // ソースをタグトークンとテキストトークンに分割。各タグには行/列を記録する。
+  // 正規表現: [tag] [tag=value] [/tag]
+  const tokenRe = /\[(\/?)([a-zA-Z]+)(?:=([^\]]*))?\]/g;
+  const tokens = [];
+  let lastIdx = 0;
+  let m;
+
+  // 行番号計算用: ソースの各オフセットがどの行/列か
+  function posAt(offset) {
+    let line = 1, col = 1;
+    for (let i = 0; i < offset; i++) {
+      if (src[i] === '\n') { line++; col = 1; }
+      else col++;
+    }
+    return { line, col };
+  }
+
+  while ((m = tokenRe.exec(src)) !== null) {
+    if (m.index > lastIdx) {
+      tokens.push({ type: 'text', value: src.substring(lastIdx, m.index) });
+    }
+    const isClose = m[1] === '/';
+    const name = m[2].toLowerCase();
+    const value = m[3]; // undefined の場合あり
+    const pos = posAt(m.index);
+
+    if (TAG_DEFS[name]) {
+      tokens.push({
+        type: isClose ? 'close' : 'open',
+        name,
+        value,
+        raw: m[0],
+        line: pos.line,
+        col: pos.col,
+      });
+    } else {
+      // 未知のタグはテキストとして扱う
+      tokens.push({ type: 'text', value: m[0] });
+    }
+    lastIdx = m.index + m[0].length;
+  }
+  if (lastIdx < src.length) {
+    tokens.push({ type: 'text', value: src.substring(lastIdx) });
+  }
+
+  // ===== スタックベースパース =====
+  // スタックには {name, value, htmlOpenIndex, line} を積む。
+  // 閉じタグが来たら、スタックを上から検索:
+  //   見つかれば: それより上に積まれている未閉じタグも一緒に閉じる(自動修復)
+  //              ※ ただしLodestoneでは「外側を勝手に閉じない」のがポイントなので、
+  //                 同名タグが一番近くで開いていれば閉じ、なければテキスト扱い。
+  // ここではLodestone本家挙動に近づけるため:
+  //   閉じタグが来た場合、スタック上で**直近の同名タグ**を探す。
+  //   見つかればそこまで閉じる。見つからなければテキスト扱い。
+  //   違う種類の閉じタグでは外側のタグを閉じない(本家準拠)
+  const stack = [];
+  const out = [];
+
+  function emitOpen(name, value, line) {
+    const def = TAG_DEFS[name];
+    out.push(def.open(value));
+    stack.push({ name, value, line, outIndex: out.length - 1 });
+  }
+
+  function emitCloseTopUntil(targetName) {
+    // Lodestone本家挙動:
+    //   [/size] が来たら、スタック内で直近の [size] を見つける。
+    //   その [size] だけを閉じる。
+    //   [size] より上に積まれた別種のタグ(例: [color])は、
+    //   いったんHTMLを閉じてから再度開き直す(ブラウザ的に正しいHTMLになる)。
+    //   これにより、[color] は閉じられず継続する。
+    let foundIdx = -1;
+    for (let i = stack.length - 1; i >= 0; i--) {
+      if (stack[i].name === targetName) { foundIdx = i; break; }
+    }
+    if (foundIdx === -1) return false;
+
+    // foundIdx より上のタグ(間に挟まった別種タグ)を記録しつつ閉じる
+    const reopenList = [];
+    while (stack.length > foundIdx + 1) {
+      const top = stack.pop();
+      out.push(TAG_DEFS[top.name].close());
+      // 再度開くために情報を保存(上にあったものから順に保存→後でreverseして再open)
+      reopenList.push({ name: top.name, value: top.value, line: top.line });
+    }
+
+    // 対象タグ自体を閉じる
+    const target = stack.pop();
+    out.push(TAG_DEFS[target.name].close());
+
+    // 間に挟まっていたタグを再度開く(元の順序で)
+    reopenList.reverse();
+    for (const item of reopenList) {
+      emitOpen(item.name, item.value, item.line);
+    }
+
+    return true;
+  }
+
+  for (const tok of tokens) {
+    if (tok.type === 'text') {
+      out.push(escapeHtml(tok.value));
+    } else if (tok.type === 'open') {
+      const def = TAG_DEFS[tok.name];
+      if (def.kind === 'void') {
+        out.push(def.render(tok.value || ''));
+      } else {
+        emitOpen(tok.name, tok.value, tok.line);
+      }
+    } else { // close
+      const def = TAG_DEFS[tok.name];
+      if (def.kind === 'void') {
+        // [/img] のような閉じタグはあり得ないので無視(本家準拠: 何も表示しない)
+      } else {
+        const closed = emitCloseTopUntil(tok.name);
+        // 対応する開きタグがなくても何も表示しない(本家準拠)
+      }
+    }
+  }
+
+  // 未クローズのタグは文末で自動的に閉じる(本家挙動)
+  while (stack.length > 0) {
+    const top = stack.pop();
+    out.push(TAG_DEFS[top.name].close());
+    issues.push({
+      level: 'warn',
+      text: `[${top.name}] が閉じられていません(自動補完しました)`,
+      line: top.line,
+    });
+  }
+
+  // 改行を <br> へ
+  let html = out.join('');
+  html = html.replace(/\n/g, '<br>');
+
+  return { html, issues };
+}
+
+/* ===========================
+   文字数カウント（公式準拠: 改行は1文字、絵文字も1文字としてカウント）
+   =========================== */
+function countChars(src) {
+  // JavaScriptの .length はUTF-16コードユニット数のため、
+  // 絵文字(サロゲートペア)が2としてカウントされてしまう。
+  // Lodestone公式は見た目上の1文字=1としてカウントするため、
+  // スプレッド構文で正確な文字数を取得する。
+  return [...src].length;
+}
+
+/* ===========================
+   Validation (パーサーから来る issues 以外の追加チェック)
+   =========================== */
+function extraValidate(src) {
+  const issues = [];
+
+  // 文字数
+  const len = countChars(src);
+  if (len > MAX_CHARS) {
+    issues.push({ level: 'error', text: `文字数オーバー (${len}/${MAX_CHARS})` });
+  }
+
+  // [hb] の数
+  const hbMatches = src.match(/\[hb\]/gi) || [];
+  if (hbMatches.length > MAX_HB) {
+    issues.push({ level: 'error', text: `[hb]タグが${hbMatches.length}個 (上限${MAX_HB}個)` });
+  } else if (hbMatches.length > 0) {
+    issues.push({ level: 'ok', text: `[hb] ${hbMatches.length}/${MAX_HB}` });
+  }
+
+  return issues;
+}
+
+/* ===========================
+   Render
+   =========================== */
+function render() {
+  const src = editor.value;
+
+  // パーサー実行 (HTMLとissuesを両方取得)
+  const { html, issues: parseIssues } = parseToHtml(src);
+  preview.innerHTML = html;
+
+  // Char count (改行除外 - 公式準拠)
+  const len = countChars(src);
+  charCountEl.textContent = `${len.toLocaleString()} / ${MAX_CHARS.toLocaleString()}`;
+  charCountEl.classList.remove('warn', 'danger');
+  if (len > MAX_CHARS) charCountEl.classList.add('danger');
+  else if (len > MAX_CHARS * 0.9) charCountEl.classList.add('warn');
+
+  // バリデーション結果をマージ
+  const allIssues = [...extraValidate(src), ...parseIssues];
+
+  if (allIssues.length === 0) {
+    validationEl.innerHTML = '<span class="validation-item ok">✓ 問題なし</span>';
+  } else {
+    validationEl.innerHTML = allIssues
+      .map(i => {
+        const lineLabel = i.line ? `<span class="validation-line">L${i.line}</span> ` : '';
+        return `<span class="validation-item ${i.level}" ${i.line ? `data-line="${i.line}"` : ''}>${lineLabel}${escapeHtml(i.text)}</span>`;
+      })
+      .join('');
+  }
+
+  // localStorage に保存
+  try {
+    localStorage.setItem(STORAGE_KEY, src);
+  } catch (e) { /* quota exceeded etc - ignore */ }
+}
+
+/* ===========================
+   バリデーション項目クリックで該当行へジャンプ
+   =========================== */
+validationEl.addEventListener('click', (e) => {
+  const item = e.target.closest('.validation-item[data-line]');
+  if (!item) return;
+  const targetLine = parseInt(item.dataset.line);
+  if (!targetLine) return;
+
+  // 行先頭のオフセットを計算
+  const lines = editor.value.split('\n');
+  let offset = 0;
+  for (let i = 0; i < targetLine - 1 && i < lines.length; i++) {
+    offset += lines[i].length + 1; // +1 for \n
+  }
+  const lineEnd = offset + (lines[targetLine - 1] || '').length;
+
+  editor.focus();
+  editor.setSelectionRange(offset, lineEnd);
+
+  // textarea を該当行までスクロール (大まかな計算)
+  const lineHeight = parseFloat(getComputedStyle(editor).lineHeight) || 20;
+  editor.scrollTop = Math.max(0, (targetLine - 3) * lineHeight);
+});
+
+/* ===========================
+   Toolbar actions
+   =========================== */
+function wrapSelection(openTag, closeTag) {
+  const start = editor.selectionStart;
+  const end = editor.selectionEnd;
+  const before = editor.value.substring(0, start);
+  const selected = editor.value.substring(start, end);
+  const after = editor.value.substring(end);
+
+  const newText = `${before}${openTag}${selected}${closeTag}${after}`;
+  editor.value = newText;
+
+  // Position cursor inside tags if no selection, else after the close tag
+  if (start === end) {
+    const pos = start + openTag.length;
+    editor.setSelectionRange(pos, pos);
+  } else {
+    const pos = start + openTag.length + selected.length + closeTag.length;
+    editor.setSelectionRange(pos, pos);
+  }
+  editor.focus();
+  render();
+}
+
+function insertAtCursor(text) {
+  const start = editor.selectionStart;
+  const end = editor.selectionEnd;
+  editor.value = editor.value.substring(0, start) + text + editor.value.substring(end);
+  const pos = start + text.length;
+  editor.setSelectionRange(pos, pos);
+  editor.focus();
+  render();
+}
+
+document.querySelectorAll('.tool-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const action = btn.dataset.action;
+    if (action === 'wrap') {
+      const tag = btn.dataset.tag;
+      wrapSelection(`[${tag}]`, `[/${tag}]`);
+    } else if (action === 'size') {
+      const size = btn.dataset.size;
+      wrapSelection(`[size=${size}]`, '[/size]');
+    } else if (action === 'link') {
+      openModal('linkModal');
+    } else if (action === 'image') {
+      openModal('imageModal');
+    } else if (action === 'video') {
+      openModal('videoModal');
+    } else if (action === 'color') {
+      openModal('colorModal');
+    }
+  });
+});
+
+document.getElementById('sizeSelect').addEventListener('change', (e) => {
+  if (e.target.value) {
+    wrapSelection(`[size=${e.target.value}]`, '[/size]');
+    e.target.value = '';
+  }
+});
+
+/* ===========================
+   Modals
+   =========================== */
+function openModal(id) {
+  document.getElementById(id).classList.add('show');
+  // Focus first input
+  const input = document.querySelector(`#${id} input`);
+  if (input) setTimeout(() => input.focus(), 30);
+}
+function closeModal(id) {
+  document.getElementById(id).classList.remove('show');
+}
+
+document.querySelectorAll('[data-close]').forEach(b => {
+  b.addEventListener('click', () => {
+    b.closest('.modal-backdrop').classList.remove('show');
+  });
+});
+document.querySelectorAll('.modal-backdrop').forEach(m => {
+  m.addEventListener('click', (e) => {
+    if (e.target === m) m.classList.remove('show');
+  });
+});
+
+document.getElementById('linkOk').addEventListener('click', () => {
+  const url = document.getElementById('linkUrl').value.trim();
+  if (!url) return;
+  // [url=入力したURL][/url] の形で挿入
+  // 選択範囲があれば wrapSelection によりその文字が間に挟まる
+  wrapSelection(`[url=${url}]`, '[/url]');
+  document.getElementById('linkUrl').value = '';
+  closeModal('linkModal');
+});
+
+document.getElementById('imageOk').addEventListener('click', () => {
+  const id = document.getElementById('imageId').value.trim();
+  if (!id) return;
+  insertAtCursor(`[img=${id}]`);
+  document.getElementById('imageId').value = '';
+  closeModal('imageModal');
+});
+
+document.getElementById('videoOk').addEventListener('click', () => {
+  const url = document.getElementById('videoUrl').value.trim();
+  if (!url) return;
+  // [video=入力したURL] の形で挿入
+  insertAtCursor(`[video=${url}]`);
+  document.getElementById('videoUrl').value = '';
+  closeModal('videoModal');
+});
+
+document.getElementById('colorOk').addEventListener('click', () => {
+  const code = document.getElementById('colorCode').value.trim();
+  if (!code) return;
+  wrapSelection(`[color=${code}]`, '[/color]');
+  closeModal('colorModal');
+});
+
+document.querySelectorAll('.color-preset').forEach(b => {
+  b.addEventListener('click', () => {
+    document.getElementById('colorCode').value = b.dataset.color;
+  });
+});
+
+/* ===========================
+   Theme toggle (preview bg)
+   =========================== */
+const themeBtn = document.getElementById('themeToggle');
+themeBtn.addEventListener('click', () => {
+  const isDark = previewWrap.classList.toggle('dark');
+  themeBtn.textContent = isDark ? '▢ 白背景' : '▣ 黒背景';
+});
+
+/* ===========================
+   Resizer
+   =========================== */
+const resizer = document.getElementById('resizer');
+const main = document.querySelector('main');
+let isResizing = false;
+
+resizer.addEventListener('mousedown', () => {
+  isResizing = true;
+  document.body.style.cursor = 'col-resize';
+  document.body.style.userSelect = 'none';
+});
+
+document.addEventListener('mousemove', (e) => {
+  if (!isResizing) return;
+  const rect = main.getBoundingClientRect();
+
+  if (window.innerWidth <= 900) {
+    // vertical layout
+    const ratio = (e.clientY - rect.top) / rect.height;
+    if (ratio > 0.15 && ratio < 0.85) {
+      main.style.gridTemplateRows = `${ratio}fr 6px ${1 - ratio}fr`;
+    }
+  } else {
+    const ratio = (e.clientX - rect.left) / rect.width;
+    if (ratio > 0.15 && ratio < 0.85) {
+      main.style.gridTemplateColumns = `${ratio}fr 6px ${1 - ratio}fr`;
+    }
+  }
+});
+
+document.addEventListener('mouseup', () => {
+  if (isResizing) {
+    isResizing = false;
+    document.body.style.cursor = '';
+    document.body.style.userSelect = '';
+  }
+});
+
+/* ===========================
+   Tab key support in textarea
+   =========================== */
+editor.addEventListener('keydown', (e) => {
+  if (e.key === 'Tab') {
+    e.preventDefault();
+    insertAtCursor('  ');
+  }
+});
+
+/* ===========================
+   Init: load draft and render
+   =========================== */
+(function init() {
+  const saved = localStorage.getItem(STORAGE_KEY);
+  if (saved) {
+    editor.value = saved;
+  } else {
+    editor.value = `[center][size=24][color=#c9a85c]極リバイアサン討滅戦 攻略メモ[/color][/size][/center]
+
+こんにちは、光の戦士のみなさん。
+今日は[b]極リバイアサン[/b]の攻略をまとめてみました。
+
+[size=18][color=#c9a85c]■ ギミック解説[/color][/size]
+
+[hb]タイダルウェイブの詳細はこちらをクリック。
+ウェイブ前に必ず船首側に集合し、ノックバック対策を済ませておきましょう。
+タンクは[u]アームズレングス[/u]、それ以外は[u]堅実魔[/u]推奨です。[/hb]
+
+[size=18][color=#c9a85c]■ 参考動画[/color][/size]
+[url=https://jp.finalfantasyxiv.com/lodestone/]ロドスト公式[/url]はこちら
+
+[right][i]それでは、また明日。[/i][/right]`;
+  }
+  editor.addEventListener('input', render);
+  render();
+})();
+</script>
+
+</body>
+</html>
